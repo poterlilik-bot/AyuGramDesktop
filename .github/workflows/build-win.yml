@@ -94,6 +94,27 @@ jobs:
           key: ${{ runner.OS }}-x64-qt6-${{ env.CACHE_KEY }}
           restore-keys: ${{ runner.OS }}-x64-qt6-
 
+      - name: Free disk space before build.
+        shell: pwsh
+        run: |
+          Write-Host "Disk space before cleanup:"
+          Get-PSDrive C | Select-Object Used,Free
+
+          Write-Host "Removing Android SDK..."
+          Remove-Item -Recurse -Force "$env:ANDROID_HOME" -ErrorAction SilentlyContinue
+
+          Write-Host "Removing .NET SDKs (keeping runtime)..."
+          Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk" -ErrorAction SilentlyContinue
+
+          Write-Host "Removing large tool caches..."
+          Remove-Item -Recurse -Force "$env:AGENT_TOOLSDIRECTORY" -ErrorAction SilentlyContinue
+
+          Write-Host "Removing Docker images..."
+          docker system prune -a -f 2>$null
+
+          Write-Host "Disk space after cleanup:"
+          Get-PSDrive C | Select-Object Used,Free
+
       - name: Libraries.
         env:
           GYP_MSVS_OVERRIDE_PATH: 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\'
