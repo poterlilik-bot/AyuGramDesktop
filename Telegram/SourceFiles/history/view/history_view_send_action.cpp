@@ -80,6 +80,9 @@ bool SendActionPainter::updateNeedsAnimating(
 		_sendActions.emplace_or_assign(user, type, now + duration, progress);
 	};
 	action.match([&](const MTPDsendMessageTypingAction &) {
+		if (_typing.empty()) {
+			_typingStartedAt = now;
+		}
 		_typing.emplace_or_assign(user, now + kStatusShowClientsideTyping);
 	}, [&](const MTPDsendMessageRecordVideoAction &) {
 		emplaceAction(Type::RecordVideo, kStatusShowClientsideRecordVideo);
@@ -241,6 +244,16 @@ bool SendActionPainter::updateNeedsAnimating(crl::time now, bool force) {
 			++i;
 		}
 	}
+	if (_typing.empty()) {
+		_typingStartedAt = 0;
+		_typingSeconds = -1;
+	} else if (_typingStartedAt > 0) {
+		const auto seconds = int((now - _typingStartedAt) / 1000);
+		if (seconds != _typingSeconds) {
+			_typingSeconds = seconds;
+			sendActionChanged = true;
+		}
+	}
 	const auto wasSpeakingAnimation = !!_speakingAnimation;
 	if (force || sendActionChanged || speakingChanged) {
 		QString newTypingString;
@@ -367,6 +380,9 @@ bool SendActionPainter::updateNeedsAnimating(crl::time now, bool force) {
 				}
 				_sendActionAnimation.start(Type::PlayGame);
 			}
+		}
+		if (typingCount > 0 && _typingStartedAt > 0 && !newTypingString.isEmpty()) {
+			newTypingString += QString(" (%1s)").arg(std::max(0, int((now - _typingStartedAt) / 1000)));
 		}
 		if (typingCount > 0) {
 			_sendActionAnimation.start(Api::SendProgressType::Typing);
