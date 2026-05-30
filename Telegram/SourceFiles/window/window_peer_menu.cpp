@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_peer_menu.h"
+#include "ayu/ui/boxes/admin_panel_box.h"
 
 #include "base/call_delayed.h"
 #include "menu/menu_check_item.h"
@@ -1167,6 +1168,11 @@ void Filler::addManageChat() {
 	_addAction(text, [=] {
 		navigation->showEditPeerBox(peer);
 	}, &st::menuIconManage);
+	if (peer->isChannel()) {
+		_addAction(u"Admin Panel"_q, [=] {
+			ShowAdminPanel(navigation, peer);
+		}, &st::menuIconManage);
+	}
 }
 
 void Filler::addBoostChat() {
