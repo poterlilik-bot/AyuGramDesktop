@@ -149,6 +149,10 @@ jobs:
         env:
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          # Qt6Network's qdnslookup_win.cpp uses DnsQueryEx/DnsWriteQuestionToBuffer_W/
+          # DnsExtractRecordsFromMessage_W which live in Dnsapi.lib. MSVC's link.exe reads
+          # the LINK env var, so this pulls the system import lib into the final link.
+          LINK: "Dnsapi.lib"
         run: |
           cd %TBUILD%\%REPO_NAME%\Telegram
 

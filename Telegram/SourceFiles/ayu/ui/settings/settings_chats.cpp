@@ -8,6 +8,7 @@
 
 #include "lang_auto.h"
 #include "ayu/ayu_settings.h"
+#include "ayu/ui/boxes/delete_chats_box.h"
 #include "ayu/ui/boxes/edit_mark_box.h"
 #include "ayu/ui/components/message_preview.h"
 #include "ayu/ui/settings/ayu_builder.h"
@@ -463,6 +464,14 @@ const auto kMeta = BuildHelper({
 	BuildStickersAndEmoji(builder, ayu);
 	BuildRecentStickersLimit(builder, ayu);
 	BuildGroupsAndChannels(builder, ayu);
+	builder.addButton({
+		.id = u"ayu/bulkDeleteChats"_q,
+		.title = rpl::single(u"Delete chats in bulk"_q),
+		.st = &st::settingsButtonNoIcon,
+		.onClick = [controller = builder.controller()] {
+			ShowDeleteChatsBox(controller);
+		},
+	});
 	BuildMarks(builder, ayu, previewState);
 	BuildWideMessagesMultiplier(builder, ayu, previewState);
 	BuildContextMenuElements(builder, ayu);
