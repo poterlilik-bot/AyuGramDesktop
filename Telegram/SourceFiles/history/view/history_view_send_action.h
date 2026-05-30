@@ -74,6 +74,9 @@ private:
 	int _animationLeft = 0;
 	int _spacesCount = 0;
 
+	crl::time _typingStartedAt = 0;
+	int _typingSeconds = -1;
+
 };
 
 } // namespace HistoryView
