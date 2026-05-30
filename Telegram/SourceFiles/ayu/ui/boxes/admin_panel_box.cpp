@@ -7,6 +7,9 @@
 #include "data/data_channel.h"
 #include "data/data_chat_participant_status.h"
 #include "data/data_peer.h"
+#include "data/data_session.h"
+#include "data/data_user.h"
+#include "api/api_chat_participants.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "ui/layers/generic_box.h"
@@ -15,6 +18,9 @@
 #include "ui/toast/toast.h"
 #include "window/window_session_controller.h"
 #include "styles/style_settings.h"
+
+#include <QtGui/QClipboard>
+#include <QtGui/QGuiApplication>
 
 namespace {
 
@@ -39,6 +45,50 @@ void SetDefaultRestrictions(not_null<PeerData*> peer, ChatRestrictions rights) {
         api->applyUpdates(result);
         Ui::Toast::Show(u"Permissions updated."_q);
     }).send();
+}
+
+void KickDeleted(not_null<ChannelData*> channel) {
+    const auto session = &channel->session();
+    session->api().chatParticipants().requestForAdd(channel,
+        [=](const Api::ChatParticipants::TLMembers &data) {
+            const auto parsed = Api::ChatParticipants::Parse(channel, data);
+            auto count = 0;
+            for (const auto &p : parsed.list) {
+                if (!p.isUser()) {
+                    continue;
+                }
+                const auto user = session->data().user(p.userId());
+                if (user->isDeleted()) {
+                    session->api().chatParticipants().kick(
+                        channel, user, p.restrictions());
+                    ++count;
+                }
+            }
+            Ui::Toast::Show(
+                QString("Kicked %1 deleted account(s).").arg(count));
+        });
+}
+
+void ExportMembers(not_null<ChannelData*> channel) {
+    const auto session = &channel->session();
+    session->api().chatParticipants().requestForAdd(channel,
+        [=](const Api::ChatParticipants::TLMembers &data) {
+            const auto parsed = Api::ChatParticipants::Parse(channel, data);
+            auto lines = QStringList();
+            for (const auto &p : parsed.list) {
+                if (!p.isUser()) {
+                    continue;
+                }
+                const auto user = session->data().user(p.userId());
+                lines.append(user->name()
+                    + " ["
+                    + QString::number(user->id.value)
+                    + "]");
+            }
+            QGuiApplication::clipboard()->setText(lines.join(QChar(10)));
+            Ui::Toast::Show(
+                QString("Copied %1 member(s).").arg(int(lines.size())));
+        });
 }
 
 } // namespace
@@ -81,6 +131,8 @@ void ShowAdminPanel(
             | ChatRestriction::EmbedLinks;
         add(u"Raid Mode: LOCK (mute non-admins)"_q, [=] { SetDefaultRestrictions(peer, kLock); });
         add(u"Raid Mode: UNLOCK"_q, [=] { SetDefaultRestrictions(peer, ChatRestrictions()); });
+        add(u"Kick deleted accounts"_q, [=] { KickDeleted(channel); });
+        add(u"Export members to clipboard"_q, [=] { ExportMembers(channel); });
         box->addButton(tr::lng_close(), [=] { box->closeBox(); });
     }));
 }
