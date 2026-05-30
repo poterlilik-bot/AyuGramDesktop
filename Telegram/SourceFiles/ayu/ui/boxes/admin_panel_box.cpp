@@ -5,6 +5,7 @@
 
 #include "apiwrap.h"
 #include "data/data_channel.h"
+#include "data/data_chat_participant_status.h"
 #include "data/data_peer.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
@@ -26,6 +27,17 @@ void SetSlowmode(not_null<ChannelData*> channel, int seconds) {
         api->applyUpdates(result);
         channel->setSlowmodeSeconds(seconds);
         Ui::Toast::Show(u"Slow mode updated."_q);
+    }).send();
+}
+
+void SetDefaultRestrictions(not_null<PeerData*> peer, ChatRestrictions rights) {
+    const auto api = &peer->session().api();
+    api->request(MTPmessages_EditChatDefaultBannedRights(
+        peer->input(),
+        RestrictionsToMTP({ rights, 0 })
+    )).done([=](const MTPUpdates &result) {
+        api->applyUpdates(result);
+        Ui::Toast::Show(u"Permissions updated."_q);
     }).send();
 }
 
@@ -54,6 +66,21 @@ void ShowAdminPanel(
         add(u"Slow mode: 30s"_q, [=] { SetSlowmode(channel, 30); });
         add(u"Slow mode: 1m"_q, [=] { SetSlowmode(channel, 60); });
         add(u"Slow mode: 5m"_q, [=] { SetSlowmode(channel, 300); });
+        const auto kLock = ChatRestriction::SendStickers
+            | ChatRestriction::SendGifs
+            | ChatRestriction::SendGames
+            | ChatRestriction::SendInline
+            | ChatRestriction::SendPolls
+            | ChatRestriction::SendPhotos
+            | ChatRestriction::SendVideos
+            | ChatRestriction::SendVideoMessages
+            | ChatRestriction::SendMusic
+            | ChatRestriction::SendVoiceMessages
+            | ChatRestriction::SendFiles
+            | ChatRestriction::SendOther
+            | ChatRestriction::EmbedLinks;
+        add(u"Raid Mode: LOCK (mute non-admins)"_q, [=] { SetDefaultRestrictions(peer, kLock); });
+        add(u"Raid Mode: UNLOCK"_q, [=] { SetDefaultRestrictions(peer, ChatRestrictions()); });
         box->addButton(tr::lng_close(), [=] { box->closeBox(); });
     }));
 }
