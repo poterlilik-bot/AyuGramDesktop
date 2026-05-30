@@ -10,6 +10,7 @@
 #include "lang_auto.h"
 #include "ayu/ayu_settings.h"
 #include "ayu/ui/ayu_logo.h"
+#include "ayu/ui/boxes/delete_chats_box.h"
 #include "ayu/ui/settings/settings_appearance.h"
 #include "ayu/ui/settings/settings_ayu.h"
 #include "ayu/ui/settings/settings_chats.h"
@@ -129,6 +130,14 @@ void BuildCategories(SectionBuilder &builder) {
 		.title = tr::ayu_CategoryOther(),
 		.targetSection = AyuOther::Id(),
 		.icon = { &st::menuIconFave },
+	});
+
+	const auto controller = builder.controller();
+	builder.addButton({
+		.id = u"ayu/bulkDeleteChats"_q,
+		.title = rpl::single(u"Delete chats in bulk"_q),
+		.icon = { &st::menuIconClear },
+		.onClick = [=] { ShowDeleteChatsBox(controller); },
 	});
 }
 
