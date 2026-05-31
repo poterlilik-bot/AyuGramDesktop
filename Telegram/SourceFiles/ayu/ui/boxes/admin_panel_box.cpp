@@ -58,7 +58,7 @@ void KickDeleted(not_null<ChannelData*> channel) {
                     continue;
                 }
                 const auto user = session->data().user(p.userId());
-                if (user->isDeleted()) {
+                if (user->flags() & UserDataFlag::Deleted) {
                     session->api().chatParticipants().kick(
                         channel, user, p.restrictions());
                     ++count;
