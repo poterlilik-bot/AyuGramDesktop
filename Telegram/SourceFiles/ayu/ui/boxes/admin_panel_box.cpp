@@ -69,6 +69,26 @@ void KickDeleted(not_null<ChannelData*> channel) {
         });
 }
 
+void KickBots(not_null<ChannelData*> channel) {
+    const auto session = &channel->session();
+    session->api().chatParticipants().requestForAdd(channel,
+        [=](const Api::ChatParticipants::TLMembers &data) {
+            const auto parsed = Api::ChatParticipants::Parse(channel, data);
+            auto count = 0;
+            for (const auto &p : parsed.list) {
+                if (!p.isUser()) {
+                    continue;
+                }
+                const auto user = session->data().user(p.userId());
+                if (user->isBot()) {
+                    session->api().chatParticipants().kick(
+                        channel, user, p.restrictions());
+                    ++count;
+                }
+            }
+            Ui::Toast::Show(QString("Kicked %1 bot(s).").arg(count));
+        });
+}
 void ExportMembers(not_null<ChannelData*> channel) {
     const auto session = &channel->session();
     session->api().chatParticipants().requestForAdd(channel,
@@ -132,6 +152,7 @@ void ShowAdminPanel(
         add(u"Raid Mode: LOCK (mute non-admins)"_q, [=] { SetDefaultRestrictions(peer, kLock); });
         add(u"Raid Mode: UNLOCK"_q, [=] { SetDefaultRestrictions(peer, ChatRestrictions()); });
         add(u"Kick deleted accounts"_q, [=] { KickDeleted(channel); });
+        add(u"Kick all bots"_q, [=] { KickBots(channel); });
         add(u"Export members to clipboard"_q, [=] { ExportMembers(channel); });
         box->addButton(tr::lng_close(), [=] { box->closeBox(); });
     }));
