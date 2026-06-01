@@ -182,6 +182,8 @@ set(ayugram_files
         ayu/ui/message_history/history_item.h
         ayu/ui/message_history/history_section.cpp
         ayu/ui/message_history/history_section.h
+        ayu/ui/boxes/admin_members_box.cpp
+        ayu/ui/boxes/admin_members_box.h
         ayu/ui/boxes/admin_panel_box.cpp
         ayu/ui/boxes/admin_panel_box.h
         ayu/ui/boxes/delete_chats_box.cpp
