@@ -4,6 +4,7 @@
 #include "ayu/ui/boxes/admin_panel_box.h"
 
 #include "apiwrap.h"
+#include "ayu/ui/boxes/admin_members_box.h"
 #include "data/data_channel.h"
 #include "data/data_chat_participant_status.h"
 #include "data/data_peer.h"
@@ -154,6 +155,7 @@ void ShowAdminPanel(
         add(u"Kick deleted accounts"_q, [=] { KickDeleted(channel); });
         add(u"Kick all bots"_q, [=] { KickBots(channel); });
         add(u"Export members to clipboard"_q, [=] { ExportMembers(channel); });
+        add(u"Ban / mute members"_q, [=] { ShowAdminMembersBox(controller, channel); });
         box->addButton(tr::lng_close(), [=] { box->closeBox(); });
     }));
 }
