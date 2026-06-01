@@ -4,6 +4,7 @@
 #include "ayu/ui/boxes/delete_chats_box.h"
 
 #include "apiwrap.h"
+#include "base/unique_qptr.h"
 #include "boxes/filters/edit_filter_chats_list.h"
 #include "boxes/peer_list_box.h"
 #include "data/data_channel.h"
@@ -12,6 +13,7 @@
 #include "data/data_histories.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
+#include "data/notify/data_notify_settings.h"
 #include "dialogs/dialogs_indexed_list.h"
 #include "dialogs/dialogs_main_list.h"
 #include "dialogs/dialogs_row.h"
@@ -20,8 +22,12 @@
 #include "main/main_session.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/toast/toast.h"
+#include "ui/widgets/popup_menu.h"
 #include "window/window_session_controller.h"
 #include "styles/style_layers.h"
+#include "styles/style_widgets.h"
+
+#include <QtGui/QCursor>
 
 namespace {
 
@@ -57,25 +63,47 @@ using Chats = base::flat_set<not_null<History*>>;
     return result;
 }
 
+void Done(const QString &what, int count) {
+    Ui::Toast::Show(what + QString(" %1 chat(s).").arg(count));
+}
+
 void ApplyArchive(const Chats &chats) {
     for (const auto &history : chats) {
         history->session().api().toggleHistoryArchived(history, true, [] {});
     }
-    Ui::Toast::Show(QString("Archived %1 chat(s).").arg(int(chats.size())));
+    Done("Archived", int(chats.size()));
 }
 
 void ApplyRead(const Chats &chats) {
     for (const auto &history : chats) {
         history->session().data().histories().readInbox(history);
     }
-    Ui::Toast::Show(QString("Marked %1 chat(s) as read.").arg(int(chats.size())));
+    Done("Marked read", int(chats.size()));
+}
+
+void ApplyMute(const Chats &chats, bool mute) {
+    for (const auto &history : chats) {
+        if (mute) {
+            history->owner().notifySettings().update(history, { .forever = true });
+        } else {
+            history->owner().notifySettings().update(history, { .unmute = true });
+        }
+    }
+    Done(mute ? "Muted" : "Unmuted", int(chats.size()));
+}
+
+void ApplyPin(const Chats &chats, bool pin) {
+    for (const auto &history : chats) {
+        history->owner().setChatPinned(history, FilterId(), pin);
+    }
+    Done(pin ? "Pinned" : "Unpinned", int(chats.size()));
 }
 
 void ApplyClear(const Chats &chats) {
     for (const auto &history : chats) {
         history->session().api().clearHistory(history->peer, false);
     }
-    Ui::Toast::Show(QString("Cleared %1 chat(s).").arg(int(chats.size())));
+    Done("Cleared", int(chats.size()));
 }
 
 void ApplyLeave(const Chats &chats) {
@@ -87,14 +115,14 @@ void ApplyLeave(const Chats &chats) {
             peer->session().api().deleteConversation(peer, false);
         }
     }
-    Ui::Toast::Show(QString("Left %1 chat(s).").arg(int(chats.size())));
+    Done("Left", int(chats.size()));
 }
 
 void ApplyDelete(const Chats &chats) {
     for (const auto &history : chats) {
         history->peer->session().api().deleteConversation(history->peer, false);
     }
-    Ui::Toast::Show(QString("Deleted %1 chat(s).").arg(int(chats.size())));
+    Done("Deleted", int(chats.size()));
 }
 
 } // namespace
@@ -116,46 +144,53 @@ void ShowDeleteChatsBox(not_null<Window::SessionController*> controller) {
         [] {});
     const auto raw = listController.get();
     auto initBox = [=](not_null<PeerListBox*> box) {
+        struct State {
+            base::unique_qptr<Ui::PopupMenu> menu;
+        };
+        const auto state = box->lifetime().make_state<State>();
         const auto gather = [=] {
             return CollectChats(
                 session, raw->chosenOptions(), box->collectSelectedRows());
         };
-        const auto confirm = [=](
-                QString text,
-                QString button,
-                Fn<void(Chats)> apply) {
-            auto chats = gather();
+        box->addButton(rpl::single(u"Actions"_q), [=] {
+            const auto chats = gather();
             if (chats.empty()) {
+                Ui::Toast::Show(u"Select chats first."_q);
                 return;
             }
-            controller->show(Ui::MakeConfirmBox({
-                .text = text.arg(int(chats.size())),
-                .confirmed = [=](Fn<void()> close) { apply(chats); close(); },
-                .confirmText = button,
-                .confirmStyle = &st::attentionBoxButton,
-            }));
-        };
-        box->addButton(rpl::single(u"Archive"_q), [=] {
-            auto chats = gather();
-            if (!chats.empty()) { ApplyArchive(chats); }
+            state->menu.emplace(box, st::defaultPopupMenu);
+            const auto confirmThen = [=](
+                    QString text,
+                    QString button,
+                    Fn<void()> act) {
+                controller->show(Ui::MakeConfirmBox({
+                    .text = text.arg(int(chats.size())),
+                    .confirmed = [=](Fn<void()> close) { act(); close(); },
+                    .confirmText = button,
+                    .confirmStyle = &st::attentionBoxButton,
+                }));
+            };
+            state->menu->addAction(u"Archive"_q, [=] { ApplyArchive(chats); });
+            state->menu->addAction(u"Mark as read"_q, [=] { ApplyRead(chats); });
+            state->menu->addAction(u"Mute"_q, [=] { ApplyMute(chats, true); });
+            state->menu->addAction(u"Unmute"_q, [=] { ApplyMute(chats, false); });
+            state->menu->addAction(u"Pin"_q, [=] { ApplyPin(chats, true); });
+            state->menu->addAction(u"Unpin"_q, [=] { ApplyPin(chats, false); });
+            state->menu->addAction(u"Clear history"_q, [=] {
+                confirmThen(u"Clear history in %1 chat(s)?"_q, u"Clear"_q,
+                    [=] { ApplyClear(chats); });
+            });
+            state->menu->addAction(u"Leave"_q, [=] {
+                confirmThen(u"Leave %1 chat(s)?"_q, u"Leave"_q,
+                    [=] { ApplyLeave(chats); });
+            });
+            state->menu->addAction(u"Delete"_q, [=] {
+                confirmThen(u"Delete %1 chat(s)? Cannot be undone."_q,
+                    u"Delete"_q, [=] { ApplyDelete(chats); });
+            });
+            state->menu->popup(QCursor::pos());
         });
-        box->addButton(rpl::single(u"Read"_q), [=] {
-            auto chats = gather();
-            if (!chats.empty()) { ApplyRead(chats); }
-        });
-        box->addButton(rpl::single(u"Clear"_q), [=] {
-            confirm(u"Clear history in %1 chat(s)?"_q, u"Clear"_q,
-                [](Chats c) { ApplyClear(c); });
-        });
-        box->addButton(rpl::single(u"Leave"_q), [=] {
-            confirm(u"Leave %1 chat(s)?"_q, u"Leave"_q,
-                [](Chats c) { ApplyLeave(c); });
-        });
-        box->addButton(rpl::single(u"Delete"_q), [=] {
-            confirm(u"Delete %1 chat(s)? Cannot be undone."_q, u"Delete"_q,
-                [](Chats c) { ApplyDelete(c); });
-        });
-        box->addTopButton(st::boxTitleClose, [=] { box->closeBox(); });
+        box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
     };
     controller->show(
         Box<PeerListBox>(std::move(listController), std::move(initBox)));
